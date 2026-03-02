@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>에세이 집 진도 현황 대시보드</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --n9: #0c1d2e; --n8: #122b42; --n7: #1a3d5e; --n6: #1d5278;
+      --n5: #2d648f; --n4: #4281aa; --n3: #6aa4c5; --n2: #a0c8de;
+      --n1: #cce0ee; --n0: #e5f2f9; --bg: #d5e8f3;
+    }
+
+    body {
+      font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      padding: 24px 16px 64px;
+      color: var(--n8);
+    }
+
+    .container { max-width: 1500px; margin: 0 auto; }
+
+    /* ════════════════ SETUP BANNER ════════════════ */
+    .setup-banner {
+      background: linear-gradient(90deg, #4c1d95, #5b21b6);
+      color: white;
+      border-radius: 14px;
+      padding: 14px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: .85rem;
+      box-shadow: 0 4px 16px rgba(76,29,149,.35);
+    }
+    .setup-banner strong { font-weight: 700; }
+    .setup-banner p { flex: 1; line-height: 1.5; opacity: .92; }
+    .setup-link {
+      color: #c4b5fd;
+      font-weight: 700;
+      text-decoration: underline;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .setup-close {
+      background: rgba(255,255,255,.15); border: none; color: white;
+      width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+      font-size: 14px; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .2s;
+    }
+    .setup-close:hover { background: rgba(255,255,255,.28); }
+
+    /* Firebase config guide modal */
+    .guide-overlay {
+      position: fixed; inset: 0; z-index: 9000;
+      background: rgba(12,29,46,.75);
+      display: none; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .guide-overlay.open { display: flex; }
+    .guide-modal {
+      background: white; border-radius: 20px;
+      padding: 36px 40px; max-width: 560px; width: 100%;
+      box-shadow: 0 20px 60px rgba(12,29,46,.4);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .guide-modal h2 { font-size: 1.3rem; font-weight: 900; color: var(--n8); margin-bottom: 6px; }
+    .guide-modal .subtitle { font-size: .85rem; color: #6b7280; margin-bottom: 24px; }
+    .guide-step {
+      display: flex; gap: 14px; margin-bottom: 18px; align-items: flex-start;
+    }
+    .step-num {
+      background: var(--n7); color: white;
+      width: 26px; height: 26px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 800; flex-shrink: 0; margin-top: 1px;
+    }
+    .step-body { font-size: .87rem; color: #374151; line-height: 1.6; }
+    .step-body strong { color: var(--n8); font-weight: 700; }
+    .step-body code {
+      background: #f1f5f9; color: #0f4c81;
+      padding: 1px 5px; border-radius: 4px;
+      font-family: monospace; font-size: .82rem;
+    }
+    .guide-close-btn {
+      margin-top: 24px; width: 100%;
+      background: var(--n7); color: white;
+      border: none; border-radius: 10px;
+      padding: 12px; font-family: inherit;
+      font-size: .9rem; font-weight: 700;
+      cursor: pointer; transition: background .2s;
+    }
+    .guide-close-btn:hover { background: var(--n6); }
+
+    /* ════════════════ HEADER ════════════════ */
+    .header {
+      background: linear-gradient(135deg, #0c1d2e 0%, #1a3d5e 55%, #1d5278 100%);
+      border-radius: 22px;
+      padding: 32px 42px;
+      color: white;
+      margin-bottom: 20px;
+      box-shadow: 0 14px 44px rgba(12,29,46,.50);
+    }
+
+    .hdr-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 26px;
+    }
+
+    .hdr-title h1 { font-size: 2rem; font-weight: 900; letter-spacing: -.5px; margin-bottom: 5px; }
+    .hdr-title p  { font-size: .87rem; opacity: .68; }
+
+    .hdr-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    /* Connection badge */
+    .conn-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: .75rem; font-weight: 600;
+      padding: 5px 12px; border-radius: 20px;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.18);
+      color: rgba(255,255,255,.88);
+      white-space: nowrap;
+    }
+    .conn-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #94a3b8; transition: all .5s;
+    }
+    .conn-dot.live    { background: #22c55e; box-shadow: 0 0 5px #22c55e; animation: blink 2.5s ease-in-out infinite; }
+    .conn-dot.demo    { background: #fbbf24; }
+    .conn-dot.offline { background: #ef4444; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+    .btn {
+      padding: 10px 22px; border-radius: 10px; border: none;
+      cursor: pointer; font-family: inherit; font-size: .84rem;
+      font-weight: 600; transition: all .2s; white-space: nowrap;
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.28);
+      color: white;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,.26); }
+
+    .overall { background: rgba(255,255,255,.1); border-radius: 13px; padding: 17px 22px; }
+    .bar-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+    .bar-meta span   { font-size: .85rem; opacity: .88; }
+    .bar-meta strong { font-size: 1.15rem; font-weight: 800; }
+    .bar-track { height: 10px; background: rgba(255,255,255,.18); border-radius: 5px; overflow: hidden; }
+    .bar-fill  {
+      height: 100%; border-radius: 5px;
+      background: linear-gradient(90deg, #6aa4c5, #b8d9ec);
+      transition: width .65s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ════════════════ TABLE CARD ════════════════ */
+    .tbl-card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(12,29,46,.12);
+      border: 1px solid var(--n1);
+      overflow-x: auto;
+      margin-bottom: 20px;
+    }
+
+    /* ════════════════ TABLE ════════════════ */
+    .dash { width: 100%; border-collapse: collapse; min-width: 840px; }
+
+    .dash thead tr.row-period th {
+      background: var(--n7); color: white;
+      font-size: .78rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .65px;
+      padding: 14px 8px 8px; text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+    }
+    .dash thead tr.row-task th {
+      background: var(--n7); color: rgba(255,255,255,.78);
+      font-size: .72rem; font-weight: 600;
+      padding: 6px 6px 13px; text-align: center;
+      border-bottom: 3px solid var(--n5);
+    }
+
+    .dash thead th.th-name {
+      position: sticky; left: 0; z-index: 10;
+      background: var(--n9); color: white;
+      text-align: left; font-size: .82rem; font-weight: 800;
+      padding: 14px 22px;
+      border-right: 2px solid rgba(255,255,255,.1);
+    }
+    .dash thead th.th-p1   { background: var(--n6); }
+    .dash thead th.th-prog { background: var(--n8); border-left: 2px solid rgba(255,255,255,.1); }
+    .dash thead th.th-sig  { background: var(--n8); border-left: 1px solid rgba(255,255,255,.07); }
+
+    .cur-badge {
+      display: inline-block;
+      background: rgba(255,255,255,.22); color: white;
+      font-size: .58rem; padding: 1px 6px; border-radius: 10px;
+      vertical-align: middle; margin-left: 4px; font-weight: 700;
+    }
+
+    /* Data rows */
+    .dash tbody tr { transition: filter .12s; }
+    .dash tbody tr:hover td { filter: brightness(.95); }
+
+    .td-name {
+      position: sticky; left: 0; z-index: 4;
+      background: white; font-weight: 900; font-size: 1.02rem;
+      color: var(--n8); padding: 14px 22px;
+      white-space: nowrap; border-right: 2px solid var(--n1);
+    }
+    .dash tbody tr:nth-child(even) .td-name { background: var(--n0); }
+
+    .td-cb {
+      text-align: center; padding: 10px 6px;
+      cursor: pointer; transition: background .12s; vertical-align: middle;
+    }
+    .td-cb:hover { background: var(--n1) !important; }
+
+    .td-p0, .td-p2, .td-p4 { background: #f7fbff; }
+    .td-p1 { background: var(--n0); }
+    .td-p3 { background: #f3f8fd; }
+    .dash tbody tr:nth-child(even) .td-p0,
+    .dash tbody tr:nth-child(even) .td-p2,
+    .dash tbody tr:nth-child(even) .td-p4 { background: #edf4fc; }
+    .dash tbody tr:nth-child(even) .td-p1  { background: #ddedf8; }
+    .dash tbody tr:nth-child(even) .td-p3  { background: #eaf1fb; }
+
+    .cb {
+      width: 30px; height: 30px; border-radius: 8px;
+      border: 2px solid var(--n2);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto; transition: all .22s;
+      background: white; font-size: 14px; color: white; font-weight: 700;
+      user-select: none;
+    }
+    .cb.on { background: var(--n7); border-color: var(--n7); }
+
+    .td-prog {
+      text-align: center; padding: 10px 16px;
+      border-left: 2px solid var(--n1); vertical-align: middle;
+      background: white;
+    }
+    .dash tbody tr:nth-child(even) .td-prog { background: var(--n0); }
+    .prog-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 88px; }
+    .prog-bg   { width: 80px; height: 7px; background: var(--n1); border-radius: 4px; overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--n7), var(--n4)); transition: width .5s ease; }
+    .prog-txt  { font-size: .78rem; font-weight: 700; color: var(--n6); }
+
+    .td-sig {
+      text-align: center; padding: 8px 12px;
+      border-left: 1px solid var(--n1); vertical-align: middle;
+      background: white;
+    }
+    .dash tbody tr:nth-child(even) .td-sig { background: var(--n0); }
+
+    /* Vertical mini traffic light */
+    .mini-tl {
+      background: var(--n9); border-radius: 11px; padding: 8px 7px;
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      box-shadow: 0 3px 10px rgba(12,29,46,.55);
+      margin: 0 auto; width: fit-content;
+    }
+    .mb { width: 18px; height: 18px; border-radius: 50%; transition: all .55s ease; }
+    .mb.r     { background: #2d0a0a; }
+    .mb.r.lit { background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b, 0 0 14px rgba(255,59,59,.55); }
+    .mb.y     { background: #2a1c00; }
+    .mb.y.lit { background: #fbbf24; box-shadow: 0 0 6px #fbbf24, 0 0 14px rgba(251,191,36,.55); }
+    .mb.g     { background: #061406; }
+    .mb.g.lit { background: #22c55e; box-shadow: 0 0 8px #22c55e, 0 0 20px rgba(34,197,94,.65); animation: gp 2s ease-in-out infinite; }
+
+    @keyframes gp {
+      0%,100%{ box-shadow: 0 0 8px #22c55e, 0 0 20px rgba(34,197,94,.65); }
+      50%    { box-shadow: 0 0 14px #22c55e, 0 0 35px rgba(34,197,94,.9), 0 0 60px rgba(34,197,94,.35); }
+    }
+
+    /* ════════════════ SUMMARY ROW ════════════════ */
+    .row-summary td {
+      background: var(--n0) !important;
+      padding: 12px 6px; text-align: center;
+      border-top: 3px solid var(--n2); vertical-align: middle;
+    }
+    .row-summary .sr-name {
+      position: sticky; left: 0; z-index: 4;
+      background: var(--n1) !important;
+      color: var(--n7); font-weight: 800; font-size: .78rem;
+      padding: 12px 22px !important;
+      white-space: nowrap; text-align: left !important;
+      border-right: 2px solid var(--n2);
+    }
+    .row-summary .sr-prog,
+    .row-summary .sr-sig { border-left: 2px solid var(--n2); }
+
+    /* Horizontal mini traffic light (summary) */
+    .period-sig-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .mini-tl-h {
+      background: var(--n9); border-radius: 20px; padding: 5px 9px;
+      display: flex; align-items: center; gap: 5px;
+      box-shadow: 0 2px 8px rgba(12,29,46,.45);
+      margin: 0 auto; width: fit-content;
+    }
+    .mbs { width: 13px; height: 13px; border-radius: 50%; transition: all .55s ease; }
+    .mbs.r     { background: #2d0a0a; }
+    .mbs.r.lit { background: #ff3b3b; box-shadow: 0 0 5px #ff3b3b, 0 0 10px rgba(255,59,59,.5); }
+    .mbs.y     { background: #2a1c00; }
+    .mbs.y.lit { background: #fbbf24; box-shadow: 0 0 5px #fbbf24, 0 0 10px rgba(251,191,36,.5); }
+    .mbs.g     { background: #061406; }
+    .mbs.g.lit { background: #22c55e; box-shadow: 0 0 6px #22c55e, 0 0 14px rgba(34,197,94,.6); animation: gp 2s ease-in-out infinite; }
+
+    .sr-count { font-size: .7rem; font-weight: 700; color: var(--n6); }
+
+    /* ════════════════ 7~9월 UNIFIED ════════════════ */
+    .shared-card {
+      background: white; border-radius: 20px; padding: 28px 36px;
+      box-shadow: 0 4px 24px rgba(12,29,46,.10);
+      border: 1px solid var(--n1); border-top: 4px solid var(--n7);
+    }
+    .s-head { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .s-title { font-size: 1.08rem; font-weight: 900; color: var(--n8); }
+    .s-badge {
+      background: var(--n0); color: var(--n6);
+      font-size: .72rem; font-weight: 700; padding: 3px 10px;
+      border-radius: 20px; border: 1px solid var(--n2);
+    }
+    .s-body  { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+    .s-tasks { display: flex; gap: 16px; flex-wrap: wrap; flex: 1; }
+
+    .s-task {
+      display: flex; align-items: center; gap: 11px;
+      padding: 16px 24px; border-radius: 14px;
+      border: 2px solid var(--n1); cursor: pointer; transition: all .18s;
+      background: #f7fbff; user-select: none; min-width: 180px;
+    }
+    .s-task:hover  { border-color: var(--n3); background: var(--n0); }
+    .s-task:active { border-color: var(--n5); background: var(--n1); }
+    .s-task.done   { background: var(--n0); border-color: var(--n4); }
+
+    .s-cb {
+      width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--n2);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 12px; color: white; font-weight: 700;
+      transition: all .2s; background: white;
+    }
+    .s-cb.on { background: var(--n7); border-color: var(--n7); }
+    .s-ico { font-size: 1.15rem; }
+    .s-lbl { font-size: .92rem; font-weight: 600; color: var(--n8); }
+    .s-task.done .s-lbl { color: var(--n4); text-decoration: line-through; }
+
+    .s-signal { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .s-sig-box {
+      background: var(--n9); border-radius: 14px; padding: 12px 11px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      box-shadow: 0 5px 18px rgba(12,29,46,.48), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .sb { width: 26px; height: 26px; border-radius: 50%; transition: all .55s; }
+    .sb.r     { background: #2d0a0a; }
+    .sb.r.lit { background: #ff3b3b; box-shadow: 0 0 10px #ff3b3b, 0 0 22px rgba(255,59,59,.55); }
+    .sb.y     { background: #2a1c00; }
+    .sb.y.lit { background: #fbbf24; box-shadow: 0 0 10px #fbbf24, 0 0 22px rgba(251,191,36,.55); }
+    .sb.g     { background: #061406; }
+    .sb.g.lit { background: #22c55e; box-shadow: 0 0 12px #22c55e, 0 0 28px rgba(34,197,94,.65), 0 0 55px rgba(34,197,94,.3); animation: gp 2s ease-in-out infinite; }
+
+    .s-status      { font-size: .8rem; color: #6b7280; text-align: center; }
+    .s-status.done { color: var(--n5); font-weight: 700; }
+
+    /* ════════════════ TOAST ════════════════ */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(90px);
+      background: var(--n8); color: white;
+      padding: 14px 30px; border-radius: 14px;
+      font-size: .9rem; font-weight: 500;
+      transition: transform .38s cubic-bezier(.34,1.56,.64,1);
+      z-index: 9999; box-shadow: 0 8px 28px rgba(12,29,46,.45);
+      pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    footer { text-align: center; margin-top: 32px; font-size: .77rem; color: var(--n5); line-height: 2; }
+
+    @media (max-width: 680px) {
+      .header      { padding: 24px 20px; }
+      .hdr-title h1{ font-size: 1.55rem; }
+      .shared-card { padding: 22px 18px; }
+      .guide-modal { padding: 26px 22px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ▌FIREBASE 설정 안내 배너 (설정 전까지 표시) ▐ -->
+<div id="setup-notice" class="setup-banner" style="display:none">
+  <span style="font-size:1.3rem">⚙️</span>
+  <p>
+    <strong>데모 모드입니다</strong> — 현재 진도는 이 기기 브라우저에만 저장됩니다.
+    팀원 모두가 실시간으로 공유하려면 Firebase를 연결해야 합니다.
+  </p>
+  <span class="setup-link" onclick="document.getElementById('guide-overlay').classList.add('open')">설정 방법 보기</span>
+  <button class="setup-close" onclick="document.getElementById('setup-notice').style.display='none'">✕</button>
+</div>
+
+<!-- ▌FIREBASE 설정 가이드 모달 ▐ -->
+<div id="guide-overlay" class="guide-overlay">
+  <div class="guide-modal">
+    <h2>🔧 Firebase 실시간 동기화 설정</h2>
+    <p class="subtitle">아래 단계를 따라 설정하면 팀원 누구든 체크한 내용이 즉시 모두에게 반영됩니다.</p>
+
+    <div class="guide-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Firebase 프로젝트 생성</strong><br>
+        <a href="https://console.firebase.google.com" target="_blank" style="color:#1d5278">console.firebase.google.com</a> 접속 →
+        <strong>프로젝트 추가</strong> → 이름 입력 (예: <code>essay-progress</code>) →
+        Google 애널리틱스 비활성화 → <strong>프로젝트 만들기</strong>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>웹 앱 등록 및 설정 코드 복사</strong><br>
+        프로젝트 홈에서 <code>&lt;/&gt;</code> 웹 아이콘 클릭 →
+        앱 닉네임 입력 → <strong>앱 등록</strong> →
+        표시되는 <code>firebaseConfig</code> 코드 전체 복사
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Realtime Database 생성</strong><br>
+        왼쪽 메뉴 <strong>빌드 → Realtime Database</strong> →
+        <strong>데이터베이스 만들기</strong> →
+        위치: <code>asia-southeast1</code> → <strong>테스트 모드로 시작</strong>
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>index.html에 설정 붙여넣기</strong><br>
+        이 파일 하단 <code>&lt;script&gt;</code> 안의
+        <code>FIREBASE_CONFIG</code> 객체를 복사한 값으로 교체 후 저장
+      </div>
+    </div>
+
+    <div class="guide-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>GitHub에 푸시</strong><br>
+        수정된 <code>index.html</code>을 GitHub에 업로드하면 완료!
+        이후 누구든 URL을 열면 실시간으로 동일한 진도를 확인·수정할 수 있습니다.
+      </div>
+    </div>
+
+    <button class="guide-close-btn" onclick="document.getElementById('guide-overlay').classList.remove('open')">
+      닫기
+    </button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ▌HEADER ▐ -->
+  <header class="header">
+    <div class="hdr-row">
+      <div class="hdr-title">
+        <h1>📖 에세이 집 진도 현황</h1>
+        <p>6인 공동 에세이 프로젝트 · 2026년 9월 출간 목표</p>
+      </div>
+      <div class="hdr-actions">
+        <div class="conn-badge">
+          <div class="conn-dot" id="connDot"></div>
+          <span id="connText">연결 중...</span>
+        </div>
+        <button class="btn btn-ghost" onclick="copyURL()">🔗 URL 복사</button>
+      </div>
+    </div>
+    <div class="overall">
+      <div class="bar-meta">
+        <span>📊 전체 진도 현황</span>
+        <strong id="overallPct">0%</strong>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" id="overallBar" style="width:0%"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ▌DASHBOARD TABLE ▐ -->
+  <div class="tbl-card">
+    <table class="dash">
+      <thead>
+        <tr class="row-period">
+          <th class="th-name" rowspan="2">참여자</th>
+          <th class="th-p0"  colspan="1">2월</th>
+          <th class="th-p1"  colspan="2">3월 <span class="cur-badge">진행중</span></th>
+          <th class="th-p2"  colspan="2">4월</th>
+          <th class="th-p3"  colspan="2">5월</th>
+          <th class="th-p4"  colspan="2">6월</th>
+          <th class="th-prog" rowspan="2">진도</th>
+          <th class="th-sig"  rowspan="2">완료</th>
+        </tr>
+        <tr class="row-task">
+          <th class="th-p0">목차 완성</th>
+          <th class="th-p1">에세이 1편</th>
+          <th class="th-p1">에세이 2편</th>
+          <th class="th-p2">에세이 3편</th>
+          <th class="th-p2">에세이 4편</th>
+          <th class="th-p3">에세이 5편</th>
+          <th class="th-p3">에세이 6편</th>
+          <th class="th-p4">에세이 7편</th>
+          <th class="th-p4">에세이 8편</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ▌7~9월 UNIFIED ▐ -->
+  <div class="shared-card" id="sharedCard"></div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+  Firebase 연결 완료 후 누구든 체크하면 즉시 전원에게 반영됩니다<br>
+  데모 모드에서는 <strong>🔗 URL 복사</strong> 후 팀 채팅에 공유하세요
+</footer>
+
+<script>
+/* ══════════════════════════════════════════════════
+   ⚙️  FIREBASE 설정 — 아래 값을 본인의 Firebase 프로젝트 설정으로 교체하세요
+   Firebase Console → 프로젝트 설정 → 내 앱 → SDK 설정 및 구성
+   ══════════════════════════════════════════════════ */
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAr3FOdxYFFyRtPXwTVyS9hNvsOk3df9VAY",
+  authDomain:        "in6colors-c89b1.firebaseapp.comJECT_ID.firebaseapp.com",
+  databaseURL:       "https://in6colors-c89b1-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "in6colors-c89b1",
+  storageBucket:     "in6colors-c89b1.firebasestorage.app",
+  messagingSenderId: "700548738771",
+  appId:             "1:700548738771:web:576192cbe9707f6825ae26"
+};
+/* ══════════════════════════════════════════════════ */
+
+/* ─────────── 데이터 정의 ─────────── */
+
+const PARTICIPANTS = ['김경운', '김지연', '노지윤', '이보미', '이정민', '최규하'];
+
+const PTASKS = [
+  { p: 0, text: '목차 완성'  },
+  { p: 1, text: '에세이 1편' },
+  { p: 1, text: '에세이 2편' },
+  { p: 2, text: '에세이 3편' },
+  { p: 2, text: '에세이 4편' },
+  { p: 3, text: '에세이 5편' },
+  { p: 3, text: '에세이 6편' },
+  { p: 4, text: '에세이 7편' },
+  { p: 4, text: '에세이 8편' },
+];
+
+const TD_CLS = ['td-p0', 'td-p1', 'td-p2', 'td-p3', 'td-p4'];
+
+const P_IDXES = [0,1,2,3,4].map(p =>
+  PTASKS.reduce((a,t,i) => (t.p===p ? [...a,i] : a), []));
+
+const STASKS = [
+  { text: '마무리 정리', ico: '📝' },
+  { text: '출판 준비',   ico: '📚' },
+  { text: '출간 완료',   ico: '🎉' },
+];
+
+const PT = PTASKS.length; // 9
+const ST = STASKS.length; // 3
+const N  = PARTICIPANTS.length; // 6
+
+/* ─────────── State ─────────── */
+let pState = new Array(N).fill(0);
+let sState = 0;
+
+/* ─────────── Firebase 여부 판단 ─────────── */
+const CONFIGURED = !FIREBASE_CONFIG.apiKey.startsWith('YOUR_');
+
+/* ─────────── State 저장 ─────────── */
+function save() {
+  if (CONFIGURED) {
+    firebase.database().ref('essay-progress').set({ p: pState, s: sState });
+  } else {
+    // 데모 모드: localStorage + URL 해시
+    const e = btoa(JSON.stringify([...pState, sState]));
+    localStorage.setItem('essay-v3', e);
+    history.replaceState(null, null, '#' + e);
+  }
+}
+
+/* ─────────── 토글 ─────────── */
+function toggleP(pi, ti) {
+  pState[pi] ^= (1 << ti);
+  render();   // 즉시 화면 반영 (optimistic)
+  save();
+  if (cntP(pi) === PT) toast(`🎉 ${PARTICIPANTS[pi]}님 개인 작업 모두 완료!`);
+}
+
+function toggleS(ti) {
+  sState ^= (1 << ti);
+  render();
+  save();
+  if (cntS() === ST) toast('🎉 7~9월 통합 작업 완료! 출간을 축하합니다!');
+}
+
+/* ─────────── 헬퍼 ─────────── */
+const isP  = (pi,ti) => !!(pState[pi] & (1 << ti));
+const isS  = (ti)    => !!(sState     & (1 << ti));
+const cntP = (pi)    => { let n=0; for(let i=0;i<PT;i++) if(isP(pi,i)) n++; return n; };
+const cntS = ()      => { let n=0; for(let i=0;i<ST;i++) if(isS(i))    n++; return n; };
+
+function periodDone(p) {
+  return PARTICIPANTS.filter((_,pi) => P_IDXES[p].every(ti => isP(pi,ti))).length;
+}
+function periodSig(p) {
+  const d = periodDone(p);
+  return d===0 ? 'r' : d<N ? 'y' : 'g';
+}
+
+/* ─────────── 렌더링 ─────────── */
+function render() {
+  let totalP = 0;
+
+  const pRows = PARTICIPANTS.map((name, pi) => {
+    const done = cntP(pi); totalP += done;
+    const pct  = Math.round((done/PT)*100);
+    const sig  = done===0 ? 'r' : done<PT ? 'y' : 'g';
+
+    const cells = PTASKS.map((t,ti) => {
+      const on = isP(pi,ti);
+      return `<td class="td-cb ${TD_CLS[t.p]}" onclick="toggleP(${pi},${ti})">
+        <div class="cb${on?' on':''}">${on?'✓':''}</div></td>`;
+    }).join('');
+
+    return `
+      <tr>
+        <td class="td-name">${name}</td>
+        ${cells}
+        <td class="td-prog">
+          <div class="prog-inner">
+            <div class="prog-bg"><div class="prog-fill" style="width:${pct}%"></div></div>
+            <span class="prog-txt">${pct}%</span>
+          </div>
+        </td>
+        <td class="td-sig">
+          <div class="mini-tl">
+            <div class="mb r${sig==='r'?' lit':''}"></div>
+            <div class="mb y${sig==='y'?' lit':''}"></div>
+            <div class="mb g${sig==='g'?' lit':''}"></div>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const periodCells = [0,1,2,3,4].map(p => {
+    const done=periodDone(p), sig=periodSig(p), cols=P_IDXES[p].length;
+    return `
+      <td colspan="${cols}">
+        <div class="period-sig-wrap">
+          <div class="mini-tl-h">
+            <div class="mbs r${sig==='r'?' lit':''}"></div>
+            <div class="mbs y${sig==='y'?' lit':''}"></div>
+            <div class="mbs g${sig==='g'?' lit':''}"></div>
+          </div>
+          <span class="sr-count">${done} / ${N}명 완료</span>
+        </div>
+      </td>`;
+  }).join('');
+
+  const summaryRow = `
+    <tr class="row-summary">
+      <td class="sr-name">달별 달성 현황</td>
+      ${periodCells}
+      <td class="sr-prog"></td>
+      <td class="sr-sig"></td>
+    </tr>`;
+
+  document.getElementById('tbody').innerHTML = pRows + summaryRow;
+
+  /* 7~9월 섹션 */
+  const sd=cntS(), ssig=sd===0?'r':sd<ST?'y':'g';
+
+  document.getElementById('sharedCard').innerHTML = `
+    <div class="s-head">
+      <span class="s-title">7~9월 통합 작업</span>
+      <span class="s-badge">전체 공통</span>
+    </div>
+    <div class="s-body">
+      <div class="s-tasks">
+        ${STASKS.map((t,ti) => {
+          const on=isS(ti);
+          return `<div class="s-task${on?' done':''}" onclick="toggleS(${ti})">
+            <div class="s-cb${on?' on':''}">${on?'✓':''}</div>
+            <span class="s-ico">${t.ico}</span>
+            <span class="s-lbl">${t.text}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="s-signal">
+        <div class="s-sig-box">
+          <div class="sb r${ssig==='r'?' lit':''}"></div>
+          <div class="sb y${ssig==='y'?' lit':''}"></div>
+          <div class="sb g${ssig==='g'?' lit':''}"></div>
+        </div>
+        <span class="s-status${sd===ST?' done':''}">${sd===ST?'✅ 완료!':`${sd} / ${ST} 완료`}</span>
+      </div>
+    </div>`;
+
+  /* 전체 진도 */
+  const total = N*PT+ST;
+  const pct   = Math.round(((totalP+sd)/total)*100);
+  document.getElementById('overallPct').textContent = pct + '%';
+  document.getElementById('overallBar').style.width = pct + '%';
+}
+
+/* ─────────── URL 복사 ─────────── */
+function copyURL() {
+  // Firebase 모드: 해시 불필요 (상태가 DB에 저장됨)
+  const url = CONFIGURED ? location.href.split('#')[0] : (() => { save(); return location.href; })();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url)
+      .then(() => toast(CONFIGURED
+        ? '🔗 URL 복사 완료! 이 링크를 공유하면 실시간 진도를 함께 볼 수 있습니다.'
+        : '🔗 진도 URL이 복사되었습니다! (데모 모드)'))
+      .catch(() => prompt('아래 URL을 복사하세요:', url));
+  } else {
+    prompt('아래 URL을 복사하세요:', url);
+  }
+}
+
+/* ─────────── 연결 상태 UI ─────────── */
+function setConn(state, text) {
+  const dot  = document.getElementById('connDot');
+  const span = document.getElementById('connText');
+  dot.className  = 'conn-dot ' + state;
+  span.textContent = text;
+}
+
+/* ─────────── 토스트 ─────────── */
+let _tt;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_tt);
+  _tt = setTimeout(() => el.classList.remove('show'), 3800);
+}
+
+/* ─────────── 초기화 ─────────── */
+function init() {
+  if (CONFIGURED) {
+    /* ── Firebase 모드 ── */
+    firebase.initializeApp(FIREBASE_CONFIG);
+    const ref = firebase.database().ref('essay-progress');
+
+    // 연결 상태 모니터링
+    firebase.database().ref('.info/connected').on('value', snap => {
+      if (snap.val()) setConn('live', '실시간 연결됨');
+      else            setConn('offline', '오프라인');
+    });
+
+    // 실시간 리스너 — 누가 바꿔도 즉시 반영
+    ref.on('value', snap => {
+      const d = snap.val();
+      if (d && Array.isArray(d.p) && d.p.length === N) {
+        pState = d.p;
+        sState = typeof d.s === 'number' ? d.s : 0;
+      }
+      render();
+    });
+
+  } else {
+    /* ── 데모 모드 (Firebase 미설정) ── */
+    setConn('demo', '데모 모드');
+    document.getElementById('setup-notice').style.display = 'flex';
+
+    // localStorage 또는 URL 해시에서 불러오기
+    const h  = location.hash.slice(1);
+    const ls = localStorage.getItem('essay-v3');
+    const src = h || ls;
+    if (src) {
+      try {
+        const a = JSON.parse(atob(src));
+        if (Array.isArray(a) && a.length === N+1) {
+          pState = a.slice(0, N);
+          sState = a[N];
+        }
+      } catch (_) {}
+    }
+    render();
+  }
+}
+
+init();
+</script>
+</body>
+</html>
